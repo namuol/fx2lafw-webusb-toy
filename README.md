@@ -31,7 +31,8 @@ using a cheap but supposedly fairly capable DLA called
 
 I'm aware of (and pretty excited about) projects like
 [gusmanb/logicanalyzer](https://github.com/gusmanb/logicanalyzer), but again
-this is more about putting DLA UX into a web app to prove a point.
+this is more about putting DLA UX into a web app to prove a point about WebUSB,
+not about building any kind of hardware abstraction layer.
 
 ## Software
 
@@ -42,7 +43,8 @@ project.
 ## Prior art
 
 I came across a commercial web product called [Farprobe](https://farprobe.com/)
-which purports to do just what I'm trying to do here, but as a serious project.
+which purports to do just what I'm trying to do here, but as a serious
+commercial product.
 
 Unfortunately I wasn't able to get my device to work using it, and I wasn't very
 happy with the UX even after importing data captures from PulseView.

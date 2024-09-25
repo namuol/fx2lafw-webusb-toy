@@ -38,10 +38,24 @@ function Code(props: JSX.IntrinsicElements['code']) {
   );
 }
 
+class ByteSet {
+  _data = new Uint8Array(255).fill(0);
+  add(idx: number) {
+    this._data[idx] = 1;
+  }
+  toArray(): Array<number> {
+    const result = [];
+    for (let i = 0; i < 255; i += 1) {
+      if (this._data[i] !== 0) result.push(i);
+    }
+    return result;
+  }
+}
+
 async function transfer(
   device: USBDevice,
   length: number = 512 * 1000,
-  count = 1,
+  count = 100,
 ) {
   const endpointNumber = 2;
   const transferPromises = [];
@@ -116,6 +130,13 @@ export default function App() {
     }
   };
 
+  const uniqueBytes = new ByteSet();
+  if (data) {
+    for (let i = 0; i < data.length; ++i) {
+      uniqueBytes.add(data[i]);
+    }
+  }
+
   return (
     <div className="p-2 gap-4 grid">
       <p>
@@ -136,8 +157,17 @@ export default function App() {
 
       {data && (
         <>
-          Raw data:
-          <textarea value={dataToString(data)} />
+          <div>
+            Raw data: (hidden)
+            {/* <textarea value={dataToString(data)} /> */}
+          </div>
+          <div>
+            Unique bytes:{' '}
+            {uniqueBytes
+              .toArray()
+              .map((n) => n.toString(16).toUpperCase())
+              .join(' ')}
+          </div>
           <Button
             onClick={() => {
               setData(null);
