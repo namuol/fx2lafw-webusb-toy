@@ -1,10 +1,8 @@
 'use client';
 import clsx from 'clsx';
 import * as React from 'react';
-
-const dataToString = (data: Uint8Array): string => {
-  return [...data].map((byte) => byte.toString(16).toUpperCase()).join(' ');
-};
+import * as zip from '@zip.js/zip.js';
+import {DataTimeline} from './DataTimeline';
 
 function Button(
   props: JSX.IntrinsicElements['button'] & {
@@ -81,6 +79,104 @@ async function startAcquisition(device: USBDevice) {
   return await device.controlTransferOut(config, data);
 }
 
+async function createZip(files: Record<string, Uint8Array | string>) {
+  const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'));
+
+  // Add files to the zip
+  for (const [filename, data] of Object.entries(files)) {
+    await zipWriter.add(
+      filename,
+      data instanceof Uint8Array
+        ? new zip.Uint8ArrayReader(data)
+        : new zip.TextReader(data),
+    );
+  }
+
+  // Close the writer and generate the Blob
+  return await zipWriter.close();
+}
+
+async function createSigrokFile(data: Uint8Array) {
+  return createZip({
+    version: '2',
+    metadata: [
+      '[global]',
+      'sigrok version=0.5.2',
+      '',
+      '[device 1]',
+      'capturefile=logic-1',
+      'total probes=8',
+      'samplerate=24 MHz',
+      'total analog=0',
+      'probe1=D0',
+      'probe2=D1',
+      'probe3=D2',
+      'probe4=D3',
+      'probe5=D4',
+      'probe6=D5',
+      'probe7=D6',
+      'probe8=D7',
+      'unitsize=1',
+    ].join('\n'),
+    'logic-1-1': data,
+  });
+}
+
+async function downloadBlob(blob: Blob, filename: string) {
+  // Check if the File System Access API is available
+  if ('showSaveFilePicker' in window) {
+    try {
+      // Create a file handle using the save file picker @ts-expect-error -
+      // window.showSaveFilePicker may not exist
+      const fileHandle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: 'Sigrok Files',
+            accept: {'application/octet-stream': ['.sr']},
+          },
+        ],
+      });
+
+      // Create a writable stream
+      const writable = await fileHandle.createWritable();
+
+      // Write the data to the file
+      await writable.write(blob);
+
+      // Close the file and save changes
+      await writable.close();
+    } catch (error) {
+      console.error('Error saving file:', error);
+    }
+  } else {
+    // Fallback for browsers that do not support the File System Access API
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+  }
+}
+
+function humanReadableSize(length: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+
+  while (length >= 1024 && index < units.length - 1) {
+    length /= 1024;
+    index++;
+  }
+
+  return `${Math.round(length)}${units[index]}`;
+}
+
 export default function App() {
   const [data, setData] = React.useState<null | Uint8Array>();
 
@@ -130,15 +226,44 @@ export default function App() {
     }
   };
 
+  const loadData = async () => {
+    const [fileHandle]: Array<FileSystemFileHandle> =
+      // @ts-expect-error - window.showOpenFilePicker may not exist
+      await window.showOpenFilePicker({
+        types: [
+          {
+            description: 'Sigrok Files',
+            accept: {'application/octet-stream': ['.sr']},
+          },
+        ],
+      });
+
+    if (!fileHandle) return;
+    const file = await fileHandle.getFile();
+    const arrayBuffer = await file.arrayBuffer();
+    const reader = new zip.ZipReader(
+      new zip.Uint8ArrayReader(new Uint8Array(arrayBuffer)),
+    );
+    const entries = await await reader.getEntries();
+    // const metadata = entries.find(f => f.filename === 'metadata');
+    const logicEntry = entries.find((f) => f.filename.startsWith('logic'));
+    if (logicEntry?.getData == null) {
+      alert(`Unable to load logic section from ${file.name}`);
+      return;
+    }
+    const loadedData = await logicEntry.getData(new zip.Uint8ArrayWriter());
+    setData(loadedData);
+  };
+
   const uniqueBytes = new ByteSet();
   if (data) {
     for (let i = 0; i < data.length; ++i) {
-      uniqueBytes.add(data[i]);
+      uniqueBytes.add(data[i]!);
     }
   }
 
   return (
-    <div className="p-2 gap-4 grid">
+    <div className="p-2 gap-4 flex flex-col overflow-hidden">
       <p>
         <span>NOTE:</span> Only{' '}
         <Code>
@@ -151,32 +276,45 @@ export default function App() {
       <p>
         Choose <Code>fx2lafw</Code> in the device UI after clicking this button:
       </p>
-      <Button kind="primary" onClick={captureData}>
-        Capture some{data != null ? ' more' : ''} data
-      </Button>
+      <div className="flex gap-2">
+        <Button kind="primary" onClick={captureData}>
+          Capture some{data != null ? ' more' : ''} data
+        </Button>
+
+        <Button kind="primary" onClick={loadData}>
+          Load some{data != null ? ' more' : ''} data
+        </Button>
+
+        {data && (
+          <>
+            <Button
+              onClick={async () => {
+                await downloadBlob(await createSigrokFile(data), 'data.sr');
+              }}
+            >
+              Download data ({humanReadableSize(data.byteLength)})
+            </Button>
+            <Button
+              onClick={() => {
+                setData(null);
+              }}
+            >
+              Clear data
+            </Button>
+          </>
+        )}
+      </div>
 
       {data && (
-        <>
-          <div>
-            Raw data: (hidden)
-            {/* <textarea value={dataToString(data)} /> */}
-          </div>
-          <div>
-            Unique bytes:{' '}
-            {uniqueBytes
-              .toArray()
-              .map((n) => n.toString(16).toUpperCase())
-              .join(' ')}
-          </div>
-          <Button
-            onClick={() => {
-              setData(null);
-            }}
-          >
-            Clear data
-          </Button>
-        </>
+        <div>
+          Unique bytes:{' '}
+          {uniqueBytes
+            .toArray()
+            .map((n) => n.toString(16).toUpperCase())
+            .join(' ')}
+        </div>
       )}
+      {<DataTimeline data={data ?? new Uint8Array()} />}
     </div>
   );
 }
