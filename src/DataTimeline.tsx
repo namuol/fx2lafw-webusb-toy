@@ -141,16 +141,18 @@ class DataTimeline2DContext {
 
     // Draw waveforms:
     {
-      const spacing = 1;
+      const spacing = 0.01;
       const vspacing = ctx.canvas.height / this.dpr / 8;
 
       for (let j = 0; j < 8; ++j) {
         ctx.strokeStyle = j % 2 ? 'red' : 'green';
-        let x = 0;
         const bit = 1 << j;
         const top = j * vspacing;
         ctx.beginPath();
-        for (let i = 0; i < data.byteLength && x < ctx.canvas.width; ++i) {
+        for (let x = 0; x < ctx.canvas.width / this.dpr; x += spacing) {
+          const i = Math.floor(
+            (x / (ctx.canvas.width / this.dpr)) * data.byteLength,
+          );
           const byte = data[i];
           if (byte == null) break;
           if ((byte & bit) === 0) {
