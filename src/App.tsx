@@ -2,7 +2,7 @@
 import clsx from 'clsx';
 import * as React from 'react';
 import * as zip from '@zip.js/zip.js';
-import {DataTimeline} from './DataTimeline';
+import {DataTimelineCanvas2D} from './DataTimeline';
 
 function Button(
   props: JSX.IntrinsicElements['button'] & {
@@ -127,7 +127,8 @@ async function downloadBlob(blob: Blob, filename: string) {
   if ('showSaveFilePicker' in window) {
     try {
       // Create a file handle using the save file picker @ts-expect-error -
-      // window.showSaveFilePicker may not exist
+      // window.showSaveFilePicker may not exist @ts-expect-error -
+      // window.showSaveFilePicker is not in typedefs
       const fileHandle = await window.showSaveFilePicker({
         suggestedName: filename,
         types: [
@@ -314,7 +315,7 @@ export default function App() {
             .join(' ')}
         </div>
       )}
-      {<DataTimeline data={data ?? new Uint8Array()} />}
+      {<DataTimelineCanvas2D data={data ?? new Uint8Array()} />}
     </div>
   );
 }
