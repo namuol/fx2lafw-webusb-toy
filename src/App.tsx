@@ -126,9 +126,9 @@ async function downloadBlob(blob: Blob, filename: string) {
   // Check if the File System Access API is available
   if ('showSaveFilePicker' in window) {
     try {
-      // Create a file handle using the save file picker @ts-expect-error -
-      // window.showSaveFilePicker may not exist @ts-expect-error -
-      // window.showSaveFilePicker is not in typedefs
+      // Create a file handle using the save file picker
+      //
+      // @ts-expect-error - window.showSaveFilePicker is not in typedefs
       const fileHandle = await window.showSaveFilePicker({
         suggestedName: filename,
         types: [
