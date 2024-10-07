@@ -2,7 +2,7 @@
 import clsx from 'clsx';
 import * as React from 'react';
 import * as zip from '@zip.js/zip.js';
-import {DataTimelineCanvas2D} from './DataTimeline';
+import {DataTimelineCanvas2D, DataTimelineMinimap} from './DataTimeline';
 
 function Button(
   props: JSX.IntrinsicElements['button'] & {
@@ -179,7 +179,7 @@ function humanReadableSize(length: number): string {
 }
 
 export default function App() {
-  const [data, setData] = React.useState<null | Uint8Array>();
+  const [data, setData] = React.useState<null | Uint8Array>(null);
 
   const captureData = async () => {
     let device;
@@ -264,49 +264,53 @@ export default function App() {
   }
 
   return (
-    <div className="p-2 gap-4 flex flex-col overflow-hidden">
-      <p>
-        <span>NOTE:</span> Only{' '}
-        <Code>
-          <Link href="https://github.com/wuxx/nanoDLA/blob/master/README_en.md">
-            nanoDLA
-          </Link>
-        </Code>{' '}
-        devices have been tested.
-      </p>
-      <p>
-        Choose <Code>fx2lafw</Code> in the device UI after clicking this button:
-      </p>
-      <div className="flex gap-2">
-        <Button kind="primary" onClick={captureData}>
-          Capture some{data != null ? ' more' : ''} data
-        </Button>
+    <div className="p-0 gap-4 flex flex-col overflow-hidden">
+      <div className="p-2 gap-4 flex flex-col overflow-hidden">
+        <p>
+          <span>NOTE:</span> Only{' '}
+          <Code>
+            <Link href="https://github.com/wuxx/nanoDLA/blob/master/README_en.md">
+              nanoDLA
+            </Link>
+          </Code>{' '}
+          devices have been tested.
+        </p>
+        <p>
+          Choose <Code>fx2lafw</Code> in the device UI after clicking this
+          button:
+        </p>
 
-        <Button kind="primary" onClick={loadData}>
-          Load some{data != null ? ' more' : ''} data
-        </Button>
+        <div className="flex gap-2">
+          <Button kind="primary" onClick={captureData}>
+            Capture some{data != null ? ' more' : ''} data
+          </Button>
 
-        {data && (
-          <>
-            <Button
-              onClick={async () => {
-                await downloadBlob(await createSigrokFile(data), 'data.sr');
-              }}
-            >
-              Download data ({humanReadableSize(data.byteLength)})
-            </Button>
-            <Button
-              onClick={() => {
-                setData(null);
-              }}
-            >
-              Clear data
-            </Button>
-          </>
-        )}
+          <Button kind="primary" onClick={loadData}>
+            Load some{data != null ? ' more' : ''} data
+          </Button>
+
+          {data && (
+            <>
+              <Button
+                onClick={async () => {
+                  await downloadBlob(await createSigrokFile(data), 'data.sr');
+                }}
+              >
+                Download data ({humanReadableSize(data.byteLength)})
+              </Button>
+              <Button
+                onClick={() => {
+                  setData(null);
+                }}
+              >
+                Clear data
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      {data && (
+      {/* {data && (
         <div>
           Unique bytes:{' '}
           {uniqueBytes
@@ -314,8 +318,12 @@ export default function App() {
             .map((n) => n.toString(16).toUpperCase())
             .join(' ')}
         </div>
-      )}
-      {<DataTimelineCanvas2D data={data ?? new Uint8Array()} />}
+      )} */}
+      <DataTimelineMinimap
+        style={{height: 80}}
+        data={data ?? new Uint8Array()}
+      />
+      <DataTimelineCanvas2D data={data ?? new Uint8Array()} />
     </div>
   );
 }
