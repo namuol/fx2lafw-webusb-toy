@@ -474,9 +474,6 @@ export function DataTimelineMinimap({
   }>({width: 0, height: 0});
   const [panZoom, setPanZoom] = useRecoilState(panZoomState);
   const panZoomRef = React.useRef<PanZoom>(panZoom);
-  const [mouseDownStart, setMouseDownStart] = React.useState<null | number>(
-    null,
-  );
 
   React.useEffect(() => {
     panZoomRef.current = panZoom;
@@ -565,7 +562,6 @@ export function DataTimelineMinimap({
 
   React.useEffect(() => {
     const handleMouseUp = () => {
-      setMouseDownStart(null);
       setDraggingWindow(false);
     };
     window.addEventListener('mouseup', handleMouseUp);
@@ -583,25 +579,33 @@ export function DataTimelineMinimap({
         const start = event.clientX / dimensions.width;
         const end = (event.clientX + 1) / dimensions.width;
         setPanZoom({start, end});
-        setMouseDownStart(start);
-      }}
-      onMouseMove={(event) => {
-        if (!mouseDownStart) return;
-        if (draggingWindow) {
-          const movementX = event.movementX / dimensions.width;
-          setPanZoom({
-            start: panZoom.start + movementX,
-            end: panZoom.end + movementX,
-          });
-          return;
+        const mouseDownStart = start;
+        const body = document.querySelector('body');
+        if (body) {
+          body.style.userSelect = 'none';
         }
 
-        const end = event.clientX / dimensions.width;
-        if (end < mouseDownStart) {
-          setPanZoom({start: end, end: mouseDownStart});
-        } else {
-          setPanZoom({start: mouseDownStart, end});
-        }
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          const end = moveEvent.clientX / dimensions.width;
+          if (end < mouseDownStart) {
+            setPanZoom({start: end, end: mouseDownStart});
+          } else {
+            setPanZoom({start: mouseDownStart, end});
+          }
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+
+        const handleMouseUp = () => {
+          const body = document.querySelector('body');
+          if (body) {
+            body.style.userSelect = 'initial';
+          }
+
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+        };
+        window.addEventListener('mouseup', handleMouseUp);
       }}
     >
       <canvas
@@ -645,9 +649,33 @@ export function DataTimelineMinimap({
           onMouseDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            const start = event.clientX / dimensions.width;
-            setMouseDownStart(start);
-            setDraggingWindow(true);
+            const body = document.querySelector('body');
+            if (body) {
+              body.style.userSelect = 'none';
+            }
+            let deltaX = 0;
+
+            const handleMouseMove = (moveEvent: MouseEvent) => {
+              deltaX += moveEvent.movementX / dimensions.width;
+              setPanZoom({
+                start: panZoom.start + deltaX,
+                end: panZoom.end + deltaX,
+              });
+              return;
+            };
+
+            window.addEventListener('mousemove', handleMouseMove);
+
+            const handleMouseUp = () => {
+              const body = document.querySelector('body');
+              if (body) {
+                body.style.userSelect = 'initial';
+              }
+
+              window.removeEventListener('mousemove', handleMouseMove);
+              window.removeEventListener('mouseup', handleMouseUp);
+            };
+            window.addEventListener('mouseup', handleMouseUp);
           }}
         />
       </svg>
