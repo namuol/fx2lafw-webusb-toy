@@ -245,6 +245,11 @@ export function DataTimelineCanvas2D({data: data_}: {data: Uint8Array}) {
     [setPanZoom],
   );
 
+  const [dimensions, setDimensions] = React.useState<{
+    width: number;
+    height: number;
+  }>({width: 0, height: 0});
+
   const handleWrapperRef = React.useCallback(
     (el: HTMLDivElement | null) => {
       if (el == null) {
@@ -258,6 +263,7 @@ export function DataTimelineCanvas2D({data: data_}: {data: Uint8Array}) {
           if (rect == null) return;
           const {width, height} = rect;
           if (canvasRef.current == null) return;
+          setDimensions({width, height});
           context.current = new DataTimeline2DCanvas(
             canvasRef.current,
             width,
@@ -272,12 +278,131 @@ export function DataTimelineCanvas2D({data: data_}: {data: Uint8Array}) {
     [handleWheel],
   );
 
+  const [regionBeingSelected, setRegionBeingSelected_] =
+    React.useState<null | PanZoom>(null);
+
+  React.useEffect(() => {
+    let mouseX = 0;
+    let regionBeingSelected_: null | PanZoom = null;
+    let dragStartX: null | number = null;
+    const setRegionBeingSelected = (v: null | PanZoom) => {
+      regionBeingSelected_ = v;
+      setRegionBeingSelected_(v);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        const start = mouseX / window.innerWidth;
+        const end = (mouseX + 1) / window.innerWidth;
+        setRegionBeingSelected({
+          start,
+          end,
+        });
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setRegionBeingSelected(null);
+      }
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      mouseX = event.clientX;
+      if (regionBeingSelected_) {
+        if (dragStartX) {
+          const end = event.clientX / window.innerWidth;
+          if (end < dragStartX) {
+            setRegionBeingSelected({start: end, end: dragStartX});
+          } else {
+            setRegionBeingSelected({start: dragStartX, end});
+          }
+        } else {
+          const start = mouseX / window.innerWidth;
+          const end = (mouseX + 1) / window.innerWidth;
+          setRegionBeingSelected({
+            start,
+            end,
+          });
+        }
+      }
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      dragStartX = event.clientX / window.innerWidth;
+    };
+    const handleMouseUp = (event: MouseEvent) => {
+      if (dragStartX != null && regionBeingSelected_ != null) {
+        const end = event.clientX / window.innerWidth;
+        const scale = panZoom.end - panZoom.start;
+        if (end < dragStartX) {
+          setPanZoom({
+            start: panZoom.start + end * scale,
+            end: panZoom.start + dragStartX * scale,
+          });
+        } else {
+          setPanZoom({
+            start: panZoom.start + dragStartX * scale,
+            end: panZoom.start + end * scale,
+          });
+        }
+      }
+      dragStartX = null;
+      setRegionBeingSelected(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [panZoom.end, panZoom.start, setPanZoom]);
+
   return (
     <div
       ref={handleWrapperRef}
-      className="self-stretch flex-grow overflow-hidden"
+      className="self-stretch flex-grow overflow-hidden relative"
     >
       <canvas ref={canvasRef} />
+      {regionBeingSelected && (
+        <svg
+          {...dimensions}
+          className="absolute top-0"
+          style={{
+            cursor: 'ew-resize',
+          }}
+        >
+          <mask
+            id="selection-cutout-mask"
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+          >
+            <rect x="0" y="0" width="100%" height="100%" fill="white" />
+            <rect
+              x={`${regionBeingSelected.start * 100}%`}
+              y="0"
+              width={`${(regionBeingSelected.end - regionBeingSelected.start) * 100}%`}
+              height="100%"
+              fill="black"
+            />
+          </mask>
+          <rect
+            x="0"
+            y="0"
+            {...dimensions}
+            fill="rgba(0,0,0,0.1)"
+            mask="url(#selection-cutout-mask)"
+          />
+        </svg>
+      )}
     </div>
   );
 }
@@ -436,6 +561,19 @@ export function DataTimelineMinimap({
     [handleWheel],
   );
 
+  const [draggingWindow, setDraggingWindow] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleMouseUp = () => {
+      setMouseDownStart(null);
+      setDraggingWindow(false);
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   return (
     <div
       ref={handleWrapperRef}
@@ -449,6 +587,15 @@ export function DataTimelineMinimap({
       }}
       onMouseMove={(event) => {
         if (!mouseDownStart) return;
+        if (draggingWindow) {
+          const movementX = event.movementX / dimensions.width;
+          setPanZoom({
+            start: panZoom.start + movementX,
+            end: panZoom.end + movementX,
+          });
+          return;
+        }
+
         const end = event.clientX / dimensions.width;
         if (end < mouseDownStart) {
           setPanZoom({start: end, end: mouseDownStart});
@@ -456,10 +603,14 @@ export function DataTimelineMinimap({
           setPanZoom({start: mouseDownStart, end});
         }
       }}
-      onMouseUp={() => {
-        setMouseDownStart(null);
-      }}
     >
+      <canvas
+        style={{
+          position: 'absolute',
+          top: 10,
+        }}
+        ref={canvasRef}
+      />
       <svg {...dimensions} className="absolute">
         <defs>
           <mask id="cutout-mask" x="0" y="0" width="100%" height="100%">
@@ -477,12 +628,29 @@ export function DataTimelineMinimap({
         <rect
           x="0"
           y="0"
-          {...dimensions}
+          width={dimensions.width}
+          height={dimensions.height + 10}
           fill="rgba(0,0,0,0.1)"
           mask="url(#cutout-mask)"
         />
+        <rect
+          x={`${panZoom.start * 100}%`}
+          y="0px"
+          width={`${Math.max(2, (panZoom.end - panZoom.start) * 100)}%`}
+          height="10px"
+          fill="purple"
+          style={{
+            cursor: draggingWindow ? 'grabbing' : 'grab',
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const start = event.clientX / dimensions.width;
+            setMouseDownStart(start);
+            setDraggingWindow(true);
+          }}
+        />
       </svg>
-      <canvas ref={canvasRef} />
     </div>
   );
 }
